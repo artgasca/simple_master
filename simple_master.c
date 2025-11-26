@@ -1,57 +1,4 @@
-#ifndef SIMPLE_MODBUS_MASTER_C
-#define SIMPLE_MODBUS_MASTER_C
-
-// ===========================================================
-//  CONFIG POR DEFECTO (puedes sobrescribir en el main)
-// ===========================================================
-#ifndef SMODBUS_BAUD
- #define SMODBUS_BAUD         9600
-#endif
-
-#ifndef SMODBUS_TX_PIN
- #define SMODBUS_TX_PIN       PIN_C6
-#endif
-
-#ifndef SMODBUS_RX_PIN
- #define SMODBUS_RX_PIN       PIN_C7
-#endif
-
-#ifndef SMODBUS_DE_PIN
- #define SMODBUS_DE_PIN       0          // 0 = no se usa DE
-#endif
-
-#ifndef SMODBUS_RE_PIN
- #define SMODBUS_RE_PIN       0          // 0 = no se usa RE
-#endif
-
-#ifndef SMODBUS_RING_SIZE
- #define SMODBUS_RING_SIZE    128
-#endif
-
-#ifndef SMODBUS_TIMEOUT_MS
- #define SMODBUS_TIMEOUT_MS   200        // Timeout total de respuesta
-#endif
-
-#ifndef SMODBUS_GAP_MS
- #define SMODBUS_GAP_MS       5          // Silencio para considerar fin de trama
-#endif
-
-#include <stdint.h>
-#include <stdio.h>
-// UART por hardware
-#use rs232(baud=SMODBUS_BAUD, xmit=SMODBUS_TX_PIN, rcv=SMODBUS_RX_PIN, ERRORS)
-
-// ===========================================================
-//  ESTADOS / ERRORES
-// ===========================================================
-typedef enum {
-   SMODBUS_OK = 0,
-   SMODBUS_ERR_TIMEOUT,
-   SMODBUS_ERR_CRC,
-   SMODBUS_ERR_FRAME,
-   SMODBUS_ERR_EXCEPTION
-} smodbus_status_t;
-
+#include "simple_master.h"
 // ===========================================================
 //  BUFFER CIRCULAR RX (INT_RDA)
 // ===========================================================
@@ -411,5 +358,3 @@ void smodbus_init(void)
    enable_interrupts(INT_RDA);
    enable_interrupts(GLOBAL);
 }
-
-#endif // SIMPLE_MODBUS_MASTER_C
