@@ -38,7 +38,7 @@ void main(void) {
     smodbus_status_t st;
     int16 value;
 
-   smodbus_init();   // Inicializa Modbus
+    smodbus_init();   // Inicializa Modbus
     while (true) {
         
         output_toggle(LED1);

@@ -82,7 +82,7 @@ void smodbus_rx_flush(void)
 
 unsigned int8 smodbus_rx_get(void)
 {
-   int8 c;
+   unsigned int8 c;
 
    while(smodbus_ring_head == smodbus_ring_tail)
    {
@@ -101,8 +101,8 @@ unsigned int8 smodbus_rx_get(void)
 #INT_RDA
 void smodbus_isr_rda(void)
 {
-   int8 c = getc();
-   int8 next = smodbus_ring_head + 1;
+   unsigned int8 c = getc();
+   unsigned int8 next = smodbus_ring_head + 1;
 
    if(next >= SMODBUS_RING_SIZE)
       next = 0;
@@ -149,7 +149,7 @@ static void smodbus_set_tx_mode(int1 enable)
 #endif
 }
 
- void smodbus_send_bytes(int8 *data, int8 len)
+ void smodbus_send_bytes(unsigned int8 *data, unsigned int8 len)
 {
    unsigned int8 i;
 
@@ -172,7 +172,7 @@ static void smodbus_set_tx_mode(int1 enable)
 // ===========================================================
 //  CRC16 MODBUS (polinomio 0xA001, LSB primero)
 // ===========================================================
-static unsigned int16 smodbus_crc16(int8 *data, int8 len)
+static unsigned int16 smodbus_crc16(unsigned int8 *data, unsigned int8 len)
 {
    unsigned int16 crc = 0xFFFF;
    unsigned int8  i, j;
@@ -202,10 +202,10 @@ static unsigned int16 smodbus_crc16(int8 *data, int8 len)
 //  - Lee hasta timeout total
 //  - Termina si hay "gap" (silencio) >= SMODBUS_GAP_MS
 // ===========================================================
-static unsigned int8 smodbus_read_frame(int8 *buf,
-                                        int8 max_len,
-                                        int16 timeout_ms,
-                                        int16 gap_ms)
+static unsigned int8 smodbus_read_frame(unsigned int8 *buf,
+                                        unsigned int8 max_len,
+                                        unsigned int16 timeout_ms,
+                                        unsigned int16 gap_ms)
 {
    unsigned int16 t = 0;
    unsigned int16 gap = 0;
@@ -252,13 +252,13 @@ static unsigned int8 smodbus_read_frame(int8 *buf,
 // ===========================================================
 #define SMODBUS_MAX_FRAME   256
 
-static smodbus_status_t smodbus_transaction(int8 *req,
-                                            int8 req_len,
-                                            int8 *resp,
-                                            int8 *resp_len)
+static smodbus_status_t smodbus_transaction(unsigned int8 *req,
+                                            unsigned int8 req_len,
+                                            unsigned int8 *resp,
+                                            unsigned int8 *resp_len)
 {
-   int16 crc_calc, crc_rx;
-   int8  len;
+   unsigned int16 crc_calc, crc_rx;
+   unsigned int8  len;
 
    // Limpiar el buffer antes de iniciar
    smodbus_rx_flush();
@@ -304,15 +304,15 @@ static smodbus_status_t smodbus_transaction(int8 *req,
 
 // 0x03: Leer N holding registers
 static smodbus_status_t smodbus_read_holding(int8 slave,
-                                      int16 start_address,
-                                      int16 quantity,
-                                      int16 *dest)
+                                      unsigned int16 start_address,
+                                      unsigned int16 quantity,
+                                      unsigned int16 *dest)
 {
-   int8  req[8];
-   int8  resp[SMODBUS_MAX_FRAME];
-   int8  len, byte_count;
-   int16 crc;
-   int8  i;
+   unsigned int8  req[8];
+   unsigned int8  resp[SMODBUS_MAX_FRAME];
+   unsigned int8  len, byte_count;
+   unsigned int16 crc;
+   unsigned int8  i;
 
    // Armar petición
    req[0] = slave;
@@ -352,16 +352,16 @@ static smodbus_status_t smodbus_read_holding(int8 slave,
 
 // Azúcar para leer 1 registro
 static smodbus_status_t smodbus_read_holding_u16(int8 slave,
-                                          int16 reg_address,
-                                          int16 *value)
+                                          unsigned int16 reg_address,
+                                          unsigned int16 *value)
 {
    return smodbus_read_holding(slave, reg_address, 1, value);
 }
 
 // 0x06: Escribir un solo holding register
 static smodbus_status_t smodbus_write_u16(int8 slave,
-                                   int16 reg_address,
-                                   int16 value)
+                                   unsigned int16 reg_address,
+                                   unsigned int16 value)
 {
    int8  req[8];
    int8  resp[SMODBUS_MAX_FRAME];
