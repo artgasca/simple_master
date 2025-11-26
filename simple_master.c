@@ -1,5 +1,5 @@
-#ifndef SIMPLE_MASTER_C
-#define SIMPLE_MASTER_C
+#ifndef SIMPLE_MODBUS_MASTER_C
+#define SIMPLE_MODBUS_MASTER_C
 
 // ===========================================================
 //  CONFIG POR DEFECTO (puedes sobrescribir en el main)
@@ -36,6 +36,8 @@
  #define SMODBUS_GAP_MS       5          // Silencio para considerar fin de trama
 #endif
 
+#include <stdint.h>
+#include <stdio.h>
 // UART por hardware
 #use rs232(baud=SMODBUS_BAUD, xmit=SMODBUS_TX_PIN, rcv=SMODBUS_RX_PIN, ERRORS)
 
@@ -58,7 +60,7 @@ volatile unsigned int8  smodbus_ring_head = 0;
 volatile unsigned int8  smodbus_ring_tail = 0;
 volatile int1           smodbus_ring_overflow = FALSE;
 
-// Flag simple de â€œhay datosâ€
+// Flag simple de “hay datos”
 int1 smodbus_rx_available(void)
 {
    return (smodbus_ring_head != smodbus_ring_tail);
@@ -80,7 +82,7 @@ void smodbus_rx_flush(void)
 
 unsigned int8 smodbus_rx_get(void)
 {
-   unsigned int8 c;
+   int8 c;
 
    while(smodbus_ring_head == smodbus_ring_tail)
    {
@@ -95,12 +97,12 @@ unsigned int8 smodbus_rx_get(void)
    return c;
 }
 
-// ISR de recepciÃ³n
+// ISR de recepción
 #INT_RDA
 void smodbus_isr_rda(void)
 {
-   unsigned int8 c = getc();
-   unsigned int8 next = smodbus_ring_head + 1;
+   int8 c = getc();
+   int8 next = smodbus_ring_head + 1;
 
    if(next >= SMODBUS_RING_SIZE)
       next = 0;
@@ -137,7 +139,7 @@ static void smodbus_set_tx_mode(int1 enable)
    if(enable)
    {
       // RE normalmente activo alto para deshabilitar RX (dependiendo del chip)
-      // ajusta si tu transceiver es al revÃ©s
+      // ajusta si tu transceiver es al revés
       output_high(SMODBUS_RE_PIN);
    }
    else
@@ -147,7 +149,7 @@ static void smodbus_set_tx_mode(int1 enable)
 #endif
 }
 
-static void smodbus_send_bytes(const unsigned int8 *data, unsigned int8 len)
+ void smodbus_send_bytes(int8 *data, int8 len)
 {
    unsigned int8 i;
 
@@ -158,11 +160,11 @@ static void smodbus_send_bytes(const unsigned int8 *data, unsigned int8 len)
       putc(data[i]);
    }
 
-   // Espera a que se vacÃ­e el shift register
-   while(!tx_done())
-   {
-      // no-op
-   }
+//   // Espera a que se vacíe el shift register
+//   while(!tx_done())
+//   {
+//      // no-op
+//   }
 
    smodbus_set_tx_mode(FALSE);
 }
@@ -170,7 +172,7 @@ static void smodbus_send_bytes(const unsigned int8 *data, unsigned int8 len)
 // ===========================================================
 //  CRC16 MODBUS (polinomio 0xA001, LSB primero)
 // ===========================================================
-static unsigned int16 smodbus_crc16(const unsigned int8 *data, unsigned int8 len)
+static unsigned int16 smodbus_crc16(int8 *data, int8 len)
 {
    unsigned int16 crc = 0xFFFF;
    unsigned int8  i, j;
@@ -200,10 +202,10 @@ static unsigned int16 smodbus_crc16(const unsigned int8 *data, unsigned int8 len
 //  - Lee hasta timeout total
 //  - Termina si hay "gap" (silencio) >= SMODBUS_GAP_MS
 // ===========================================================
-static unsigned int8 smodbus_read_frame(unsigned int8 *buf,
-                                        unsigned int8 max_len,
-                                        unsigned int16 timeout_ms,
-                                        unsigned int16 gap_ms)
+static unsigned int8 smodbus_read_frame(int8 *buf,
+                                        int8 max_len,
+                                        int16 timeout_ms,
+                                        int16 gap_ms)
 {
    unsigned int16 t = 0;
    unsigned int16 gap = 0;
@@ -233,7 +235,7 @@ static unsigned int8 smodbus_read_frame(unsigned int8 *buf,
          gap++;
          if(gap >= gap_ms)
          {
-            // Tiempo de silencio suficiente: consideramos que terminÃ³ la trama
+            // Tiempo de silencio suficiente: consideramos que terminó la trama
             break;
          }
       }
@@ -246,22 +248,22 @@ static unsigned int8 smodbus_read_frame(unsigned int8 *buf,
 }
 
 // ===========================================================
-//  TRANSACCIÃ“N GENÃ‰RICA MODBUS RTU MAESTRO
+//  TRANSACCIÓN GENÉRICA MODBUS RTU MAESTRO
 // ===========================================================
 #define SMODBUS_MAX_FRAME   256
 
-static smodbus_status_t smodbus_transaction(const unsigned int8 *req,
-                                            unsigned int8 req_len,
-                                            unsigned int8 *resp,
-                                            unsigned int8 *resp_len)
+static smodbus_status_t smodbus_transaction(int8 *req,
+                                            int8 req_len,
+                                            int8 *resp,
+                                            int8 *resp_len)
 {
-   unsigned int16 crc_calc, crc_rx;
-   unsigned int8  len;
+   int16 crc_calc, crc_rx;
+   int8  len;
 
    // Limpiar el buffer antes de iniciar
    smodbus_rx_flush();
 
-   // Enviar peticiÃ³n
+   // Enviar petición
    smodbus_send_bytes(req, req_len);
 
    // Leer respuesta
@@ -287,7 +289,7 @@ static smodbus_status_t smodbus_transaction(const unsigned int8 *req,
       return SMODBUS_ERR_CRC;
    }
 
-   // Revisar si es excepciÃ³n (bit 7 del cÃ³digo de funciÃ³n)
+   // Revisar si es excepción (bit 7 del código de función)
    if(resp[1] & 0x80)
    {
       return SMODBUS_ERR_EXCEPTION;
@@ -301,18 +303,18 @@ static smodbus_status_t smodbus_transaction(const unsigned int8 *req,
 // ===========================================================
 
 // 0x03: Leer N holding registers
-smodbus_status_t smodbus_read_holding(uint8 slave,
-                                      unsigned int16 start_address,
-                                      unsigned int16 quantity,
-                                      unsigned int16 *dest)
+static smodbus_status_t smodbus_read_holding(int8 slave,
+                                      int16 start_address,
+                                      int16 quantity,
+                                      int16 *dest)
 {
-   unsigned int8  req[8];
-   unsigned int8  resp[SMODBUS_MAX_FRAME];
-   unsigned int8  len, byte_count;
-   unsigned int16 crc;
-   unsigned int8  i;
+   int8  req[8];
+   int8  resp[SMODBUS_MAX_FRAME];
+   int8  len, byte_count;
+   int16 crc;
+   int8  i;
 
-   // Armar peticiÃ³n
+   // Armar petición
    req[0] = slave;
    req[1] = 0x03;                      // Function code
    req[2] = make8(start_address, 1);   // Hi
@@ -327,7 +329,7 @@ smodbus_status_t smodbus_read_holding(uint8 slave,
    if(st != SMODBUS_OK)
       return st;
 
-   // Validar slave y funciÃ³n
+   // Validar slave y función
    if(resp[0] != slave || resp[1] != 0x03)
       return SMODBUS_ERR_FRAME;
 
@@ -348,25 +350,25 @@ smodbus_status_t smodbus_read_holding(uint8 slave,
    return SMODBUS_OK;
 }
 
-// AzÃºcar para leer 1 registro
-smodbus_status_t smodbus_read_holding_u16(uint8 slave,
-                                          unsigned int16 reg_address,
-                                          unsigned int16 *value)
+// Azúcar para leer 1 registro
+static smodbus_status_t smodbus_read_holding_u16(int8 slave,
+                                          int16 reg_address,
+                                          int16 *value)
 {
    return smodbus_read_holding(slave, reg_address, 1, value);
 }
 
 // 0x06: Escribir un solo holding register
-smodbus_status_t smodbus_write_u16(uint8 slave,
-                                   unsigned int16 reg_address,
-                                   unsigned int16 value)
+static smodbus_status_t smodbus_write_u16(int8 slave,
+                                   int16 reg_address,
+                                   int16 value)
 {
-   unsigned int8  req[8];
-   unsigned int8  resp[SMODBUS_MAX_FRAME];
-   unsigned int8  len;
-   unsigned int16 crc;
+   int8  req[8];
+   int8  resp[SMODBUS_MAX_FRAME];
+   int8  len;
+   int16 crc;
 
-   // PeticiÃ³n
+   // Petición
    req[0] = slave;
    req[1] = 0x06;
    req[2] = make8(reg_address, 1);
@@ -381,7 +383,7 @@ smodbus_status_t smodbus_write_u16(uint8 slave,
    if(st != SMODBUS_OK)
       return st;
 
-   // Respuesta de 0x06 es eco de la peticiÃ³n
+   // Respuesta de 0x06 es eco de la petición
    if(len < 8)
       return SMODBUS_ERR_FRAME;
 
@@ -392,7 +394,7 @@ smodbus_status_t smodbus_write_u16(uint8 slave,
 }
 
 // ===========================================================
-//  INIT PÃšBLICO
+//  INIT PÚBLICO
 // ===========================================================
 void smodbus_init(void)
 {
@@ -401,7 +403,7 @@ void smodbus_init(void)
    output_low(SMODBUS_DE_PIN);
 #endif
 #if (SMODBUS_RE_PIN != 0)
-   output_low(SMODBUS_RE_PIN);   // Ajusta segÃºn tu transceiver
+   output_low(SMODBUS_RE_PIN);   // Ajusta según tu transceiver
 #endif
 
    smodbus_rx_flush();
