@@ -1,7 +1,10 @@
 #include "simple_master.h"
 
 // UART por hardware
-#use rs232(baud=SMODBUS_BAUD, xmit=SMODBUS_TX_PIN, rcv=SMODBUS_RX_PIN, ERRORS)
+
+//#use rs232(baud=SMODBUS_BAUD, xmit=SMODBUS_TX_PIN, rcv=SMODBUS_RX_PIN, ERRORS)
+//#use rs232(baud=115200,parity=N,UART4,bits=8,stream=SMODBUS_PORT,errors)
+#use rs232(baud=115200, UART4, bits=8, stop=2, parity=N, stream=SMODBUS_PORT, errors)
 // ===========================================================
 //  BUFFER CIRCULAR RX (INT_RDA)
 // ===========================================================
@@ -48,10 +51,10 @@ unsigned int8 smodbus_rx_get(void)
 }
 
 // ISR de recepción
-#INT_RDA2
+#INT_RDA4
 void smodbus_isr_rda(void)
 {
-   unsigned int8 c = getc();
+   unsigned int8 c = fgetc(SMODBUS_PORT);
    unsigned int8 next = smodbus_ring_head + 1;
 
    if(next >= SMODBUS_RING_SIZE)
@@ -107,7 +110,7 @@ static void smodbus_set_tx_mode(int1 enable)
 
    for(i = 0; i < len; i++)
    {
-      putc(data[i]);
+      fputc(data[i],SMODBUS_PORT);
    }
 
 //   // Espera a que se vacíe el shift register
@@ -152,57 +155,78 @@ static unsigned int16 smodbus_crc16(unsigned int8 *data, unsigned int8 len)
 //  - Lee hasta timeout total
 //  - Termina si hay "gap" (silencio) >= SMODBUS_GAP_MS
 // ===========================================================
-static unsigned int8 smodbus_read_frame(unsigned int8 *buf,
-                                        unsigned int8 max_len,
+int8 smodbus_read_frame(unsigned int8 *buf,
+                                        unsigned int16 max_len,
                                         unsigned int16 timeout_ms,
                                         unsigned int16 gap_ms)
 {
-   unsigned int16 t = 0;
+   unsigned int16 t   = 0;
    unsigned int16 gap = 0;
-   unsigned int8  len = 0;
+   unsigned int16  len = 0;
 
-   while(t < timeout_ms)
+   // ==============================
+   // 1) ESPERAR EL PRIMER BYTE
+   // ==============================
+   while ((t < timeout_ms) && !smodbus_rx_available())
    {
-      if(smodbus_rx_available())
-      {
-         gap = 0;
-
-         while(smodbus_rx_available())
-         {
-            unsigned int8 c = smodbus_rx_get();
-            if(len < max_len)
-            {
-               buf[len++] = c;
-            }
-            else
-            {
-               // descartar extra
-            }
-         }
-      }
-      else
-      {
-         gap++;
-         if(gap >= gap_ms)
-         {
-            // Tiempo de silencio suficiente: consideramos que terminó la trama
-            break;
-         }
-      }
-
       delay_ms(1);
       t++;
    }
 
+   // Si después del timeout no hay nada, salimos con 0 bytes
+   if (!smodbus_rx_available())
+   {
+#if SMODBUS_DEBUG == true
+      fprintf(DEBUG,"[FRAME] Timeout esperando primer byte, len=0\r\n");
+#endif
+      return 0;
+   }
+
+   // ==============================
+   // 2) LEER HASTA QUE HAYA GAP
+   // ==============================
+   delay_ms(1);
+   while (TRUE)
+   {
+      // Drena todo lo que haya disponible
+      while (smodbus_rx_available())
+      {
+         unsigned int8 c = smodbus_rx_get();
+
+         if (len < max_len)
+         {
+            buf[len++] = c;
+         }
+         // si se llena el buffer, el resto se descarta
+
+         gap = 0;   // llegó algo, reseteamos gap
+      }
+
+      // Si ya tenemos datos, medimos gap para determinar fin de trama
+      if (gap >= gap_ms)
+      {
+         break;   // silencio suficiente => fin de trama
+      }
+
+      delay_ms(1);
+      gap++;
+   }
+
+#if SMODBUS_DEBUG == true
+   fprintf(DEBUG,"[FRAME] len final=%lu\r\n", len);
+#endif
+
    return len;
 }
+
+
 
 // ===========================================================
 //  TRANSACCIÓN GENÉRICA MODBUS RTU MAESTRO
 // ===========================================================
 #define SMODBUS_MAX_FRAME   256
 
-static smodbus_status_t smodbus_transaction(unsigned int8 *req,
+smodbus_status_t smodbus_transaction(unsigned int8 *req,
                                             unsigned int8 req_len,
                                             unsigned int8 *resp,
                                             unsigned int8 *resp_len)
@@ -212,6 +236,10 @@ static smodbus_status_t smodbus_transaction(unsigned int8 *req,
 
    // Limpiar el buffer antes de iniciar
    smodbus_rx_flush();
+   
+   //Debug output
+   smodbus_debug_tx(req, req_len);
+
 
    // Enviar petición
    smodbus_send_bytes(req, req_len);
@@ -221,6 +249,11 @@ static smodbus_status_t smodbus_transaction(unsigned int8 *req,
                             SMODBUS_MAX_FRAME,
                             SMODBUS_TIMEOUT_MS,
                             SMODBUS_GAP_MS);
+   fprintf(DEBUG,"Read frame len %d\r\n",len);
+   
+   //Debug respuesta
+   smodbus_debug_rx(resp, len);
+
 
    *resp_len = len;
 
@@ -253,7 +286,7 @@ static smodbus_status_t smodbus_transaction(unsigned int8 *req,
 // ===========================================================
 
 // 0x03: Leer N holding registers
-static smodbus_status_t smodbus_read_holding(int8 slave,
+smodbus_status_t smodbus_read_holding(int8 slave,
                                       unsigned int16 start_address,
                                       unsigned int16 quantity,
                                       unsigned int16 *dest)
@@ -275,7 +308,7 @@ static smodbus_status_t smodbus_read_holding(int8 slave,
    req[6] = make8(crc, 0);             // CRC Lo
    req[7] = make8(crc, 1);             // CRC Hi
 
-   smodbus_status_t st = smodbus_transaction(req, 8, resp, &len);
+   smodbus_status_t st = smodbus_transaction(req, 8, &resp, &len);
    if(st != SMODBUS_OK)
       return st;
 
@@ -358,6 +391,39 @@ void smodbus_init(void)
 
    smodbus_rx_flush();
 
-   enable_interrupts(INT_RDA);
+   enable_interrupts(INT_RDA4);
    enable_interrupts(GLOBAL);
+}
+
+
+
+
+// ===========================================================
+// DEBUG HELPERS (solo si SMODBUS_DEBUG = 1)
+// ===========================================================
+void smodbus_debug_hex(char *label, unsigned int8 *data, unsigned int8 len)
+{
+#if SMODBUS_DEBUG == true
+   unsigned int8 i;
+   fprintf(DEBUG,"\r\n[%s] (%u bytes): ", label, len);
+   for(i = 0; i < len; i++)
+   {
+      fprintf(DEBUG,"%02X ", data[i]);
+   }
+   fprintf(DEBUG,"\r\n");
+#endif
+}
+
+void smodbus_debug_tx(unsigned int8 *frame, unsigned int8 len)
+{
+#if SMODBUS_DEBUG == true
+   smodbus_debug_hex((char*)"TX", frame, len);
+#endif
+}
+
+void smodbus_debug_rx(unsigned int8 *frame, unsigned int8 len)
+{
+#if SMODBUS_DEBUG == true
+   smodbus_debug_hex((char*)"RX", frame, len);
+#endif
 }

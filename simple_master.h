@@ -39,6 +39,10 @@
 #endif
 
 
+#ifndef SMODBUS_DEBUG
+ #define SMODBUS_DEBUG          0
+#endif
+
 // ===========================================================
 // ENUM DE ESTADOS DEL DRIVER
 // ===========================================================
@@ -49,6 +53,19 @@ typedef enum {
     SMODBUS_ERR_FRAME,
     SMODBUS_ERR_EXCEPTION
 } smodbus_status_t;
+
+
+// =============================================
+//  DEBUG (activar con #define SMODBUS_DEBUG 1)
+// =============================================
+#ifndef SMODBUS_DEBUG
+ #define SMODBUS_DEBUG 0
+#endif
+
+// Salida de debug (usa printf de CCS)
+void smodbus_debug_hex(char *label, unsigned int8 *data, unsigned int8 len);
+void smodbus_debug_tx(unsigned int8 *frame, unsigned int8 len);
+void smodbus_debug_rx(unsigned int8 *frame, unsigned int8 len);
 
 
 // ===========================================================
