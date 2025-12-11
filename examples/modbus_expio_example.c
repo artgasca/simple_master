@@ -51,7 +51,7 @@ void main(void) {
 
     smodbus_status_t st;
     int16 value;
-    int8 di[16];   
+    int8 di[16];
 
     smodbus_init();   // Inicializa Modbus
     while (true) {
@@ -74,7 +74,13 @@ void main(void) {
         else{
             protolink_debug_msg("Fail\r\n");
         }
-        
+        st = smodbus_write_u16(ID_SLAVE_ADDR,OUTPUT_BIT_PORT_ADDRESS,value);
+        if(st == SMODBUS_OK){
+            protolink_debug_msg("Write OK\r\n");
+        }
+        else{
+            protolink_debug_msg("Write File\r\n");
+        }
      
         // Leer un solo registro
         //st = smodbus_read_holding_u16(1, 0x0010, &value);
